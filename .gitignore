@@ -1,0 +1,4 @@
+.runcfg
+build/
+.ccls-cache/
+*.vim
