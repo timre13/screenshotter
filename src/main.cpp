@@ -6,10 +6,91 @@
 #include <fstream>
 #include <iostream>
 #include <ctime>
+#include <cstdint>
 
 /*
  * http://www.verycomputer.com/275_6ac8f0955e9280fa_1.htm
  */
+
+class Screenshot
+{
+private:
+    Display*            m_disp{};
+    Screen*             m_screen{};
+    // Handle to the shared memory buffer
+    XShmSegmentInfo*    m_shmInfo{};
+    // The screenshot itself
+    XImage*             m_img{};
+
+public:
+    Screenshot(Display* disp)
+        : m_disp{disp}, m_shmInfo{new XShmSegmentInfo{}}
+    {
+        m_screen = XDefaultScreenOfDisplay(disp);
+        const int screeni = XDefaultScreen(disp);
+
+        const Window win = XRootWindowOfScreen(m_screen);
+
+        // Get root window info
+        XWindowAttributes attrs{};
+        Status rets = XGetWindowAttributes(disp, win, &attrs);
+        assert(rets);
+
+        m_img = XShmCreateImage(
+                disp, // Display
+                DefaultVisual(disp, screeni), // Visual (display format)
+                DefaultDepthOfScreen(m_screen), // Depth
+                ZPixmap, // Format
+                nullptr, // Data
+                m_shmInfo, // shminfo
+                attrs.width, // width
+                attrs.height // height
+        );
+
+        // Create a shared memory buffer
+        m_shmInfo->shmid = shmget(IPC_PRIVATE, m_img->bytes_per_line*m_img->height, IPC_CREAT|0777);
+        m_img->data = (char*)shmat(m_shmInfo->shmid, nullptr, 0);
+        m_shmInfo->shmaddr = m_img->data;
+        m_shmInfo->readOnly = false;
+
+        // Bind the buffer
+        Bool retb = XShmAttach(disp, m_shmInfo);
+        assert(retb);
+
+        // Copy the image from the root window to the image buffer
+        retb = XShmGetImage(disp, win, m_img, 0, 0, AllPlanes);
+        assert(retb);
+    }
+
+    inline int getWidth() const { return m_img->width; }
+    inline int getHeight() const { return m_img->height; }
+    inline int getPixelCount() const { return m_img->width*m_img->height; }
+
+    struct Pixel
+    {
+        uint8_t r{};
+        uint8_t g{};
+        uint8_t b{};
+    };
+
+    inline Pixel getPixel(int index)
+    {
+        return {
+            (uint8_t)m_img->data[index * 4 + 2], // R
+            (uint8_t)m_img->data[index * 4 + 1], // G
+            (uint8_t)m_img->data[index * 4 + 0], // B
+        };
+    }
+
+    ~Screenshot()
+    {
+        // Unbind the shared buffer
+        XShmDetach(m_disp, m_shmInfo);
+        shmdt(m_shmInfo->shmaddr);
+        // Delete the shared buffer
+        shmctl(m_shmInfo->shmid, IPC_RMID, 0);
+    }
+};
 
 static std::string genFilenamePref()
 {
@@ -20,43 +101,24 @@ static std::string genFilenamePref()
     return buff;
 }
 
+static int xErrHandler(Display* disp, XErrorEvent* event)
+{
+    char buff[1024]{};
+    XGetErrorText(disp, event->error_code, buff, sizeof(buff));
+
+    std::cerr << "X Error: " << buff;
+    return 0;
+}
+
 int main()
 {
+    XSetErrorHandler(&xErrHandler);
+
     Display* disp = XOpenDisplay(nullptr);
     assert(disp);
-    Screen* screen = XDefaultScreenOfDisplay(disp);
-    int screeni = XDefaultScreen(disp);
-    assert(screen);
-    Window win = XRootWindowOfScreen(screen);
 
+    Screenshot sshot{disp};
 
-
-    XWindowAttributes attrs{};
-    Status rets = XGetWindowAttributes(disp, win, &attrs);
-    assert(rets);
-
-    XShmSegmentInfo shminfo{};
-
-    XImage* img = XShmCreateImage(
-            disp,
-            DefaultVisual(disp, screeni),
-            DefaultDepthOfScreen(screen),
-            ZPixmap,
-            nullptr,
-            &shminfo,
-            attrs.width,
-            attrs.height
-    );
-    shminfo.shmid = shmget(IPC_PRIVATE, img->bytes_per_line*img->height, IPC_CREAT|0777);
-    img->data = (char*)shmat(shminfo.shmid, nullptr, 0);
-    shminfo.shmaddr = img->data;
-    shminfo.readOnly = false;
-
-    Bool retb = XShmAttach(disp, &shminfo);
-    assert(retb);
-
-    retb = XShmGetImage(disp, win, img, 0, 0, AllPlanes);
-    assert(retb);
 
 
     const std::string filename = genFilenamePref()+".ppm";
@@ -65,24 +127,21 @@ int main()
     assert(file.is_open());
 
     file.write("P6\n", 3);
-    const std::string widthStr = std::to_string(img->width) + "\n";
+    const std::string widthStr = std::to_string(sshot.getWidth()) + "\n";
     file.write(widthStr.c_str(), widthStr.length());
-    const std::string heightStr = std::to_string(img->height) + "\n";
+    const std::string heightStr = std::to_string(sshot.getHeight()) + "\n";
     file.write(heightStr.c_str(), heightStr.length());
     file.write("255\n", 4);
-    for (int i{}; i < img->width*img->height; ++i)
+    for (int i{}; i < sshot.getPixelCount(); ++i)
     {
-        file.put(img->data[i*4+2]);
-        file.put(img->data[i*4+1]);
-        file.put(img->data[i*4+0]);
+        const Screenshot::Pixel pxl = sshot.getPixel(i);
+        file.put(pxl.r);
+        file.put(pxl.g);
+        file.put(pxl.b);
     }
     file.close();
 
     std::cout << "Saved screenshot to \""+filename+"\"\n";
-
-    XShmDetach(disp, &shminfo);
-    shmdt(shminfo.shmaddr);
-    shmctl(shminfo.shmid, IPC_RMID, 0);
 
     return 0;
 }
