@@ -5,10 +5,20 @@
 #include <X11/extensions/XShm.h>
 #include <fstream>
 #include <iostream>
+#include <ctime>
 
 /*
  * http://www.verycomputer.com/275_6ac8f0955e9280fa_1.htm
  */
+
+static std::string genFilenamePref()
+{
+    time_t time = std::time(nullptr);
+    tm* localTM = std::localtime(&time);
+    char buff[sizeof("0000-00-00-000000")]{};
+    std::strftime(buff, sizeof(buff), "%F-%H%M%S", localTM);
+    return buff;
+}
 
 int main()
 {
@@ -49,8 +59,9 @@ int main()
     assert(retb);
 
 
+    const std::string filename = genFilenamePref()+".ppm";
     std::fstream file;
-    file.open("out.ppm", std::ios_base::out|std::ios_base::binary);
+    file.open(filename, std::ios_base::out|std::ios_base::binary);
     assert(file.is_open());
 
     file.write("P6\n", 3);
@@ -67,7 +78,7 @@ int main()
     }
     file.close();
 
-    std::cout << "Saved screenshot to \"out.ppm\"\n";
+    std::cout << "Saved screenshot to \""+filename+"\"\n";
 
     XShmDetach(disp, &shminfo);
     shmdt(shminfo.shmaddr);
