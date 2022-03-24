@@ -7,6 +7,8 @@
 #include <iostream>
 #include <ctime>
 #include <cstdint>
+#include <errno.h>
+#include <cstring>
 
 /*
  * http://www.verycomputer.com/275_6ac8f0955e9280fa_1.htm
@@ -82,6 +84,37 @@ public:
         };
     }
 
+    inline void writeToPPMFile(const std::string& filename)
+    {
+        std::fstream file;
+        file.open(filename, std::ios_base::out|std::ios_base::binary);
+        if (!file.is_open())
+        {
+            throw std::runtime_error{"Failed to write to file: \""+filename+"\": "+std::strerror(errno)};
+        }
+
+        // Magic bytes
+        file.write("P6\n", 3);
+
+        const std::string widthStr = std::to_string(getWidth()) + "\n";
+        file.write(widthStr.c_str(), widthStr.length());
+
+        const std::string heightStr = std::to_string(getHeight()) + "\n";
+        file.write(heightStr.c_str(), heightStr.length());
+
+        // Max component value
+        file.write("255\n", 4);
+
+        for (int i{}; i < getPixelCount(); ++i)
+        {
+            const Screenshot::Pixel pxl = getPixel(i);
+            file.put(pxl.r);
+            file.put(pxl.g);
+            file.put(pxl.b);
+        }
+        file.close();
+    }
+
     ~Screenshot()
     {
         // Unbind the shared buffer
@@ -118,29 +151,8 @@ int main()
     assert(disp);
 
     Screenshot sshot{disp};
-
-
-
     const std::string filename = genFilenamePref()+".ppm";
-    std::fstream file;
-    file.open(filename, std::ios_base::out|std::ios_base::binary);
-    assert(file.is_open());
-
-    file.write("P6\n", 3);
-    const std::string widthStr = std::to_string(sshot.getWidth()) + "\n";
-    file.write(widthStr.c_str(), widthStr.length());
-    const std::string heightStr = std::to_string(sshot.getHeight()) + "\n";
-    file.write(heightStr.c_str(), heightStr.length());
-    file.write("255\n", 4);
-    for (int i{}; i < sshot.getPixelCount(); ++i)
-    {
-        const Screenshot::Pixel pxl = sshot.getPixel(i);
-        file.put(pxl.r);
-        file.put(pxl.g);
-        file.put(pxl.b);
-    }
-    file.close();
-
+    sshot.writeToPPMFile(filename);
     std::cout << "Saved screenshot to \""+filename+"\"\n";
 
     return 0;
