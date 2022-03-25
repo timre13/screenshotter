@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS "-O3 -D_REENTRANT -Wall -Wextra -Wpedantic")
 
 SET(CMAKE_EXPORT_COMPILE_COMMANDS true)
 
-link_libraries(X11 Xext GLX GL)
+link_libraries(X11 Xext GLX GL GLEW)
 
 add_executable(shot
     src/main.cpp

@@ -1,4 +1,6 @@
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <GL/glew.h>
 #include <GL/gl.h>
 #include <GL/glx.h>
 #include <iostream>
@@ -7,11 +9,15 @@
 #include <cassert>
 #include "Screenshot.h"
 
+using uint = unsigned int;
+
 /*
  * http://www.verycomputer.com/275_6ac8f0955e9280fa_1.htm
  */
 
 bool g_isDisplayOpen = false;
+
+//typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 
 static std::string genFilenamePref()
 {
@@ -33,6 +39,87 @@ static int xErrHandler(Display* disp, XErrorEvent* event)
     return 0;
 }
 
+static constexpr const char* vertShaderSrc = "\
+#version 130                                  \n\
+                                              \n\
+in vec2 inVert;                               \n\
+in vec2 inTexCoord;                           \n\
+                                              \n\
+out vec2 texCoord;                            \n\
+                                              \n\
+void main()                                   \n\
+{                                             \n\
+    gl_Position = vec4(inVert.xy, 0.0f, 1.0); \n\
+                                              \n\
+    texCoord = inTexCoord;                    \n\
+}                                             ";
+
+static constexpr const char* fragShaderSrc = "\
+#version 130                                  \n\
+                                              \n\
+in vec2 texCoord;                             \n\
+                                              \n\
+out vec4 outColor;                            \n\
+                                              \n\
+uniform sampler2D tex;                        \n\
+                                              \n\
+void main()                                   \n\
+{                                             \n\
+    outColor = texture(tex, texCoord).rgba;   \n\
+}                                             ";
+
+static uint createShader(bool isVert, const char* source)
+{
+    uint shaderId = glCreateShader(isVert ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER);
+    assert(shaderId);
+    glShaderSource(shaderId, 1, &source, 0);
+
+    glCompileShader(shaderId);
+    int compStat{};
+    glGetShaderiv(shaderId, GL_COMPILE_STATUS, &compStat);
+    if (compStat != GL_TRUE)
+    {
+        int infoLogLen{};
+        glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &infoLogLen);
+
+        char* buff = new char[infoLogLen]{};
+        glGetShaderInfoLog(shaderId, infoLogLen, nullptr, buff);
+        std::cout << "ERR: Failed to compile "
+            << (isVert ? "vertex" : "fragment")
+            << " shader (id=" << shaderId << "): " << buff << '\n';
+        delete[] buff;
+        std::exit(1);
+    }
+
+    return shaderId;
+}
+
+static uint createShaderProg(const char* vertSource, const char* fragSource)
+{
+    uint vertShader = createShader(true, vertSource);
+    uint fragShader = createShader(false, fragSource);
+    uint prog = glCreateProgram();
+    assert(prog);
+    glAttachShader(prog, vertShader);
+    glAttachShader(prog, fragShader);
+    glLinkProgram(prog);
+
+    int linkStat{};
+    glGetProgramiv(prog, GL_LINK_STATUS, &linkStat);
+    if (linkStat != GL_TRUE)
+    {
+        int infoLogLen{};
+        glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &infoLogLen);
+        char* buff = new char[infoLogLen];
+        glGetProgramInfoLog(prog, infoLogLen, nullptr, buff);
+        std::cout << "Failed to link shader program (id=" << prog << "): " << buff << '\n';
+        delete[] buff;
+        std::exit(1);
+    }
+
+    return 0;
+}
+
 int main()
 {
     XSetErrorHandler(&xErrHandler);
@@ -49,6 +136,7 @@ int main()
     }
 
     Screen* screen = XDefaultScreenOfDisplay(disp);
+    //int screeni = XDefaultScreen(disp);
     Window rootWin = XRootWindowOfScreen(screen);
 
     XWindowAttributes attrs{};
@@ -83,8 +171,33 @@ int main()
     );
     XMapWindow(disp, glxWin);
 
+    /*
+    static constexpr int contextAttrs[] = {
+        GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+        GLX_CONTEXT_MINOR_VERSION_ARB, 1,
+        None
+    };
+
+    int fbConfCount{};
+    GLXFBConfig* fbConf = glXChooseFBConfig(disp, screeni, (int*)visAttrs, &fbConfCount);
+
+    glXCreateContextAttribsARBProc glXCreateContextAttribsARB =
+        (glXCreateContextAttribsARBProc)glXGetProcAddressARB((const GLubyte *)"glXCreateContextAttribsARB");
+    GLXContext glxCont = glXCreateContextAttribsARB(disp, fbConf, nullptr, GL_TRUE, (const int*)contextAttrs);
+    */
+
     GLXContext glxCont = glXCreateContext(disp, visInf, nullptr, GL_TRUE);
     glXMakeCurrent(disp, glxWin, glxCont);
+
+    glewExperimental = true;
+    GLenum glewInitStat = glewInit();
+    if (glewInitStat != GLEW_OK)
+    {
+        std::cerr << "Failed to initialize GLEW: " << glewGetErrorString(glewInitStat) << '\n';
+        std::exit(1);
+    }
+
+
     glViewport(0, 0, attrs.width, attrs.height);
 
     glClearColor(0.8f, 0.4f, 0.2f, 1.0f);
@@ -103,6 +216,8 @@ int main()
     // Tell X to send a `ClientMessage` event on window close
     Atom wmDeleteMessage = XInternAtom(disp, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(disp, glxWin, &wmDeleteMessage, 1);
+
+    uint shader = createShaderProg(vertShaderSrc, fragShaderSrc);
 
     bool done = false;
     while (!done)
