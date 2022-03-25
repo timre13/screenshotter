@@ -13,4 +13,5 @@ link_libraries(X11 Xext GLX GL)
 
 add_executable(shot
     src/main.cpp
+    src/Screenshot.cpp
 )
