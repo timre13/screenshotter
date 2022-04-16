@@ -142,10 +142,13 @@ int main()
     XWindowAttributes attrs{};
     Status rets = XGetWindowAttributes(disp, rootWin, &attrs);
     assert(rets);
+    std::cout << "Root window size is: " << attrs.width << "x" << attrs.height << '\n';
 
     XSetWindowAttributes winAttrs{};
     winAttrs.border_pixel = 0;
-    winAttrs.event_mask = StructureNotifyMask;
+    winAttrs.event_mask = ButtonPressMask|ButtonReleaseMask|KeyPressMask|KeyReleaseMask|PointerMotionMask|ExposureMask|ClientMessage;
+    winAttrs.override_redirect = true;
+    winAttrs.save_under = true;
     static constexpr int visAttrs[] = {
         GLX_RGBA,
         GLX_DEPTH_SIZE, 24,
@@ -170,6 +173,7 @@ int main()
             &winAttrs
     );
     XMapWindow(disp, glxWin);
+    XGrabKeyboard(disp, glxWin, false, GrabModeAsync, GrabModeAsync, CurrentTime);
 
     /*
     static constexpr int contextAttrs[] = {
@@ -229,8 +233,12 @@ int main()
             switch (event.type)
             {
                 case KeyRelease:
-                    done = true;
+                {
+                    const auto key = XLookupKeysym(&event.xkey, 0);
+                    if (key == XK_q || key == XK_Escape)
+                        done = true;
                     break;
+                }
 
                 case ClientMessage:
                     // If the message is "WM_DELETE_WINDOW"
@@ -247,6 +255,7 @@ int main()
         glXSwapBuffers(disp, glxWin);
     }
 
+    XUngrabKeyboard(disp, CurrentTime);
     XCloseDisplay(disp);
     g_isDisplayOpen = false;
     return 0;
