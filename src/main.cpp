@@ -1,5 +1,6 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/cursorfont.h>
 #include <GL/glew.h>
 #include <GL/gl.h>
 #include <GL/glx.h>
@@ -175,6 +176,9 @@ int main()
     );
     XMapWindow(disp, glxWin);
     XGrabKeyboard(disp, glxWin, false, GrabModeAsync, GrabModeAsync, CurrentTime);
+
+    Cursor curs = XCreateFontCursor(disp, XC_crosshair);
+    XDefineCursor(disp, glxWin, curs);
 
     GLXContext glxCont = glXCreateContext(disp, visInf, nullptr, GL_TRUE);
     glXMakeCurrent(disp, glxWin, glxCont);
