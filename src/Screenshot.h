@@ -38,8 +38,14 @@ public:
         };
     }
 
+    inline const unsigned char* getDataPtr() const
+    {
+        return (unsigned char*)m_img->data;
+    }
+
     void writeToPPMFile(const std::string& filename) const;
 
+    void destroy();
     ~Screenshot();
 };
 

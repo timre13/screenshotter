@@ -78,7 +78,7 @@ void Screenshot::writeToPPMFile(const std::string& filename) const
     file.close();
 }
 
-Screenshot::~Screenshot()
+void Screenshot::destroy()
 {
     assert(g_isDisplayOpen);
     // Unbind the shared buffer
@@ -86,5 +86,17 @@ Screenshot::~Screenshot()
     shmdt(m_shmInfo->shmaddr);
     // Delete the shared buffer
     shmctl(m_shmInfo->shmid, IPC_RMID, 0);
+    delete m_shmInfo;
+
+    m_disp = nullptr;
+    m_screen = nullptr;
+    m_shmInfo = nullptr;
+    m_img = nullptr;
+}
+
+Screenshot::~Screenshot()
+{
+    if (m_img)
+        destroy();
 }
 
