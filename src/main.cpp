@@ -43,7 +43,7 @@ static int xErrHandler(Display* disp, XErrorEvent* event)
 #define VERT_ATTRIB_VERT_COORD 0
 #define VERT_ATTRIB_TEX_COORD 1
 
-static constexpr const char* vertShaderSrc = "\
+static constexpr const char* imgVertShaderSrc = "\
 #version 130                                  \n\
                                               \n\
 in vec3 inVert;                               \n\
@@ -58,7 +58,7 @@ void main()                                   \n\
     texCoord = inTexCoord;                    \n\
 }                                             ";
 
-static constexpr const char* fragShaderSrc = "\
+static constexpr const char* imgFragShaderSrc = "\
 #version 130                                  \n\
                                               \n\
 in vec2 texCoord;                             \n\
@@ -70,6 +70,28 @@ uniform sampler2D tex;                        \n\
 void main()                                   \n\
 {                                             \n\
     outColor = texture(tex, texCoord).rgba;   \n\
+}                                             ";
+
+//------------------------------------------------------------
+
+static constexpr const char* selectionVertShaderSrc = "\
+#version 130                                  \n\
+                                              \n\
+in vec3 inVert;                               \n\
+                                              \n\
+void main()                                   \n\
+{                                             \n\
+    gl_Position = vec4(inVert.xyz, 1.0);      \n\
+}                                             ";
+
+static constexpr const char* selectionFragShaderSrc = "\
+#version 130                                  \n\
+                                              \n\
+out vec4 outColor;                            \n\
+                                              \n\
+void main()                                   \n\
+{                                             \n\
+    outColor = vec4(0.9, 0.6, 0.4, 0.5);      \n\
 }                                             ";
 
 static uint createShader(bool isVert, const char* source)
@@ -162,6 +184,8 @@ int main()
     assert(visInf);
     winAttrs.colormap = XCreateColormap(disp, rootWin, visInf->visual, AllocNone);
 
+    Cursor curs = XCreateFontCursor(disp, XC_crosshair);
+
     Window glxWin = XCreateWindow(
             disp,
             rootWin,
@@ -176,8 +200,8 @@ int main()
     );
     XMapWindow(disp, glxWin);
     XGrabKeyboard(disp, glxWin, false, GrabModeAsync, GrabModeAsync, CurrentTime);
+    XGrabPointer(disp, glxWin, false, ButtonMotionMask|ButtonPressMask|ButtonReleaseMask, GrabModeAsync, GrabModeAsync, glxWin, curs, CurrentTime);
 
-    Cursor curs = XCreateFontCursor(disp, XC_crosshair);
     XDefineCursor(disp, glxWin, curs);
 
     GLXContext glxCont = glXCreateContext(disp, visInf, nullptr, GL_TRUE);
@@ -211,9 +235,9 @@ int main()
     Atom wmDeleteMessage = XInternAtom(disp, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(disp, glxWin, &wmDeleteMessage, 1);
 
-    uint shader = createShaderProg(vertShaderSrc, fragShaderSrc);
+    uint imgShader = createShaderProg(imgVertShaderSrc, imgFragShaderSrc);
 
-    const float vertCoords[] = {
+    const float imgVertCoords[] = {
         -1, -1, 0, /**/ 0, 1, // 0 - Top left
         -1,  1, 0, /**/ 0, 0, // 1 - Bottom left
          1, -1, 0, /**/ 1, 1, // 2 - Top right
@@ -222,24 +246,49 @@ int main()
     const int vertIndices[] = {
         1, 0, 2, 1, 3, 2
     };
-    uint vao{};
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+    uint imgVao{};
+    glGenVertexArrays(1, &imgVao);
+    glBindVertexArray(imgVao);
 
-    uint vbo{};
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertCoords), vertCoords, GL_STATIC_DRAW);
+    uint imgVbo{};
+    glGenBuffers(1, &imgVbo);
+    glBindBuffer(GL_ARRAY_BUFFER, imgVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(imgVertCoords), imgVertCoords, GL_STATIC_DRAW);
 
-    uint ebo{};
-    glGenBuffers(1, &ebo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    uint imgEbo{};
+    glGenBuffers(1, &imgEbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, imgEbo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(vertIndices), vertIndices, GL_STATIC_DRAW);
 
     glVertexAttribPointer(VERT_ATTRIB_VERT_COORD, 3, GL_FLOAT, false, sizeof(float)*5, (void*)0);
     glEnableVertexAttribArray(VERT_ATTRIB_VERT_COORD);
     glVertexAttribPointer(VERT_ATTRIB_TEX_COORD, 2, GL_FLOAT, false, sizeof(float)*5, (void*)(sizeof(float)*3));
     glEnableVertexAttribArray(VERT_ATTRIB_TEX_COORD);
+
+    //------------------------------------------------------------
+
+    uint selectionShader = createShaderProg(selectionVertShaderSrc, selectionFragShaderSrc);
+
+    float selVertCoords[12] = {};
+
+    uint selectionVao{};
+    glGenVertexArrays(1, &selectionVao);
+    glBindVertexArray(selectionVao);
+
+    uint selectionVbo{};
+    glGenBuffers(1, &selectionVbo);
+    glBindBuffer(GL_ARRAY_BUFFER, selectionVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(imgVertCoords), nullptr, GL_DYNAMIC_DRAW);
+
+    uint selectionEbo{};
+    glGenBuffers(1, &selectionEbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, selectionEbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(vertIndices), vertIndices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(VERT_ATTRIB_VERT_COORD, 3, GL_FLOAT, false, 0, (void*)0);
+    glEnableVertexAttribArray(VERT_ATTRIB_VERT_COORD);
+
+    //------------------------------------------------------------
 
     uint tex{};
     glGenTextures(1, &tex);
@@ -248,17 +297,24 @@ int main()
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, sshot.getWidth(), sshot.getHeight(), 0, GL_BGRA, GL_UNSIGNED_BYTE, sshot.getDataPtr());
     glGenerateMipmap(GL_TEXTURE_2D);
 
-    glUniform1i(glGetUniformLocation(shader, "tex"), 0);
+    glUniform1i(glGetUniformLocation(imgShader, "tex"), 0);
 
     glEnable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glPolygonMode(GL_FRONT_AND_BACK, false ? GL_LINE : GL_FILL);
 
+    bool isDragging = false;
+    int mouseX{};
+    int mouseY{};
+    int selStartX{};
+    int selStartY{};
     bool done = false;
     while (!done)
     {
         XEvent event{};
-        if (XPending(disp)) // If there are events in the queue
+        while (XPending(disp)) // While there are events in the queue
         {
             XNextEvent(disp, &event);
             switch (event.type)
@@ -276,22 +332,79 @@ int main()
                     if ((Atom)(event.xclient.data.l[0]) == wmDeleteMessage)
                         done = true;
                     break;
+
+                case MotionNotify:
+                {
+                    std::cout << "Moved pointer to: " << event.xmotion.x << ", " << event.xmotion.y << '\n';
+                    mouseX = event.xmotion.x;
+                    mouseY = event.xmotion.y;
+                    break;
+                }
+
+                case ButtonPress:
+                {
+                    std::cout << "Pressed mouse button: " << event.xbutton.button << '\n';
+                    if (event.xbutton.button == 1)
+                    {
+                        isDragging = true;
+                        selStartX = mouseX;
+                        selStartY = mouseY;
+                    }
+                    break;
+                }
+
+                case ButtonRelease:
+                {
+                    std::cout << "Released mouse button: " << event.xbutton.button << '\n';
+                    if (event.xbutton.button == 1)
+                        isDragging = false;
+                    break;
+                }
             }
         }
 
         glClearColor(0.8f, 0.8f, 0.2f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUseProgram(shader);
+        glUseProgram(imgShader);
+        glBindVertexArray(imgVao);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
+
+        glUseProgram(selectionShader);
+        glBindVertexArray(selectionVao);
+        if (isDragging)
+        {
+            const float x1 = float(selStartX)/sshot.getWidth()*2-1.0f;
+            const float y1 = float(sshot.getHeight()-selStartY)/sshot.getHeight()*2-1.0f;
+            const float x2 = float(mouseX)/sshot.getWidth()*2-1.0f;
+            const float y2 = float(sshot.getHeight()-mouseY)/sshot.getHeight()*2-1.0f;
+            selVertCoords[0]  = x1; selVertCoords[1]  = y1;
+            selVertCoords[3]  = x1; selVertCoords[4]  = y2;
+            selVertCoords[6]  = x2; selVertCoords[7]  = y1;
+            selVertCoords[9]  = x2; selVertCoords[10] = y2;
+
+            glBindBuffer(GL_ARRAY_BUFFER, selectionVbo);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(imgVertCoords), selVertCoords);
+        }
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
         glXSwapBuffers(disp, glxWin);
     }
 
+    glDeleteBuffers(1, &imgVbo);
+    glDeleteBuffers(1, &imgEbo);
+    glDeleteVertexArrays(1, &imgVao);
+    glDeleteProgram(imgShader);
+    glDeleteBuffers(1, &selectionVbo);
+    glDeleteBuffers(1, &selectionEbo);
+    glDeleteVertexArrays(1, &selectionVao);
+    glDeleteProgram(selectionShader);
     sshot.destroy();
     XUngrabKeyboard(disp, CurrentTime);
+    XUngrabPointer(disp, CurrentTime);
     XCloseDisplay(disp);
+    XFreeCursor(disp, curs);
     g_isDisplayOpen = false;
     return 0;
 }
