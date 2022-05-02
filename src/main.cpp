@@ -155,9 +155,6 @@ int main()
     g_isDisplayOpen = true;
 
     Screenshot sshot{disp};
-    const std::string filename = genFilenamePref()+".ppm";
-    sshot.writeToPPMFile(filename);
-    std::cout << "Saved screenshot to \""+filename+"\"\n";
 
     Screen* screen = XDefaultScreenOfDisplay(disp);
     //int screeni = XDefaultScreen(disp);
@@ -311,6 +308,7 @@ int main()
     int selStartX{};
     int selStartY{};
     bool done = false;
+    bool cancelled = false;
     while (!done)
     {
         XEvent event{};
@@ -323,14 +321,25 @@ int main()
                 {
                     const auto key = XLookupKeysym(&event.xkey, 0);
                     if (key == XK_q || key == XK_Escape)
+                    {
                         done = true;
+                        cancelled = true;
+                    }
+                    else if (key == XK_Return)
+                    {
+                        done = true;
+                        cancelled = false;
+                    }
                     break;
                 }
 
                 case ClientMessage:
                     // If the message is "WM_DELETE_WINDOW"
                     if ((Atom)(event.xclient.data.l[0]) == wmDeleteMessage)
+                    {
                         done = true;
+                        cancelled = true;
+                    }
                     break;
 
                 case MotionNotify:
@@ -390,6 +399,34 @@ int main()
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
         glXSwapBuffers(disp, glxWin);
+    }
+
+
+    if (!cancelled)
+    {
+        const int xPos = std::min(selStartX, mouseX);
+        const int yPos = std::min(selStartY, mouseY);
+        const int width = std::abs(selStartX-mouseX);
+        const int height = std::abs(selStartY-mouseY);
+        if (width > 0 && height > 0)
+        {
+            std::cout << "Cropping: position: (" << xPos << ", " << yPos << "), size: " << width << 'x' << height << '\n';
+            std::cout.flush();
+            sshot.crop(xPos, yPos, width, height);
+        }
+        else
+        {
+            std::cout << "Not cropping\n";
+            std::cout.flush();
+        }
+
+        const std::string filename = genFilenamePref()+".ppm";
+        sshot.writeToPPMFile(filename);
+        std::cout << "Saved screenshot to \""+filename+"\"\n";
+    }
+    else
+    {
+        std::cout << "Cancelled\n";
     }
 
     glDeleteBuffers(1, &imgVbo);

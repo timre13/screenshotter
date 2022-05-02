@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+#define BYTES_PER_PIXEL 4
+
 class Screenshot
 {
 private:
@@ -30,9 +32,9 @@ public:
     inline Pixel getPixel(int index) const
     {
         return {
-            (uint8_t)m_data[index * 4 + 2], // R
-            (uint8_t)m_data[index * 4 + 1], // G
-            (uint8_t)m_data[index * 4 + 0], // B
+            (uint8_t)m_data[index * BYTES_PER_PIXEL + 2], // R
+            (uint8_t)m_data[index * BYTES_PER_PIXEL + 1], // G
+            (uint8_t)m_data[index * BYTES_PER_PIXEL + 0], // B
         };
     }
 

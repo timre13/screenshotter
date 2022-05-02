@@ -95,6 +95,32 @@ void Screenshot::writeToPPMFile(const std::string& filename) const
     file.close();
 }
 
+void Screenshot::crop(int fromX, int fromY, int width, int height)
+{
+    assert(width > 0);
+    assert(height > 0);
+    assert(fromX + width < m_width);
+    assert(fromY + height < m_height);
+
+    const int bytesPerLine = width*BYTES_PER_PIXEL;
+    uint8_t* buff = new uint8_t[height*bytesPerLine]{};
+    std::memset(buff, 100, height*bytesPerLine);
+
+    for (int yoffs{}; yoffs < height; ++yoffs)
+    {
+        std::memcpy(
+                buff+yoffs*bytesPerLine,
+                m_data+(fromY+yoffs)*m_bytesPerLine+fromX*BYTES_PER_PIXEL,
+                width*BYTES_PER_PIXEL);
+    }
+
+    delete[] m_data;
+    m_data = buff;
+    m_width = width;
+    m_height = height;
+    m_bytesPerLine = bytesPerLine;
+}
+
 void Screenshot::destroy()
 {
     delete[] m_data;
