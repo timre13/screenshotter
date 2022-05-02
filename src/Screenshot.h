@@ -8,19 +8,17 @@
 class Screenshot
 {
 private:
-    Display*            m_disp{};
-    Screen*             m_screen{};
-    // Handle to the shared memory buffer
-    XShmSegmentInfo*    m_shmInfo{};
-    // The screenshot itself
-    XImage*             m_img{};
+    uint8_t* m_data{};
+    int m_width{};
+    int m_height{};
+    int m_bytesPerLine{};
 
 public:
     Screenshot(Display* disp);
 
-    inline int getWidth() const { return m_img->width; }
-    inline int getHeight() const { return m_img->height; }
-    inline int getPixelCount() const { return m_img->width*m_img->height; }
+    inline int getWidth() const { return m_width; }
+    inline int getHeight() const { return m_height; }
+    inline int getPixelCount() const { return m_width*m_height; }
 
     struct Pixel
     {
@@ -32,16 +30,18 @@ public:
     inline Pixel getPixel(int index) const
     {
         return {
-            (uint8_t)m_img->data[index * 4 + 2], // R
-            (uint8_t)m_img->data[index * 4 + 1], // G
-            (uint8_t)m_img->data[index * 4 + 0], // B
+            (uint8_t)m_data[index * 4 + 2], // R
+            (uint8_t)m_data[index * 4 + 1], // G
+            (uint8_t)m_data[index * 4 + 0], // B
         };
     }
 
-    inline const unsigned char* getDataPtr() const
+    inline const uint8_t* getDataPtr() const
     {
-        return (unsigned char*)m_img->data;
+        return m_data;
     }
+
+    void crop(int fromX, int fromY, int width, int height);
 
     void writeToPPMFile(const std::string& filename) const;
 

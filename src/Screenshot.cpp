@@ -5,50 +5,67 @@
 #include <errno.h>
 #include <cstring>
 #include <cassert>
+#include <memory.h>
 
 extern bool g_isDisplayOpen;
 
 Screenshot::Screenshot(Display* disp)
-    : m_disp{disp}, m_shmInfo{new XShmSegmentInfo{}}
 {
-    m_screen = XDefaultScreenOfDisplay(disp);
+    Screen* screen = XDefaultScreenOfDisplay(disp);
     const int screeni = XDefaultScreen(disp);
 
-    const Window win = XRootWindowOfScreen(m_screen);
+    const Window win = XRootWindowOfScreen(screen);
 
     // Get root window info
     XWindowAttributes attrs{};
     Status rets = XGetWindowAttributes(disp, win, &attrs);
     assert(rets);
 
-    m_img = XShmCreateImage(
+    XShmSegmentInfo* shmInfo = new XShmSegmentInfo{};
+
+    XImage* img = XShmCreateImage(
             disp, // Display
             DefaultVisual(disp, screeni), // Visual (display format)
-            DefaultDepthOfScreen(m_screen), // Depth
+            DefaultDepthOfScreen(screen), // Depth
             ZPixmap, // Format
             nullptr, // Data
-            m_shmInfo, // shminfo
+            shmInfo, // shminfo
             attrs.width, // width
             attrs.height // height
     );
 
     // Create a shared memory buffer
-    m_shmInfo->shmid = shmget(IPC_PRIVATE, m_img->bytes_per_line*m_img->height, IPC_CREAT|0777);
-    m_img->data = (char*)shmat(m_shmInfo->shmid, nullptr, 0);
-    m_shmInfo->shmaddr = m_img->data;
-    m_shmInfo->readOnly = false;
+    shmInfo->shmid = shmget(IPC_PRIVATE, img->bytes_per_line*img->height, IPC_CREAT|0777);
+    img->data = (char*)shmat(shmInfo->shmid, nullptr, 0);
+    shmInfo->shmaddr = img->data;
+    shmInfo->readOnly = false;
 
     // Bind the buffer
-    Bool retb = XShmAttach(disp, m_shmInfo);
+    Bool retb = XShmAttach(disp, shmInfo);
     assert(retb);
 
     // Copy the image from the root window to the image buffer
-    retb = XShmGetImage(disp, win, m_img, 0, 0, AllPlanes);
+    retb = XShmGetImage(disp, win, img, 0, 0, AllPlanes);
     assert(retb);
+
+    m_width = img->width;
+    m_height = img->height;
+    m_bytesPerLine = img->bytes_per_line;
+    m_data = new uint8_t[m_bytesPerLine*m_height];
+    std::memcpy(m_data, img->data, m_bytesPerLine*m_height);
+
+    // Unbind the shared buffer
+    XShmDetach(disp, shmInfo);
+    shmdt(shmInfo->shmaddr);
+    // Delete the shared buffer
+    shmctl(shmInfo->shmid, IPC_RMID, 0);
+    delete shmInfo;
 }
 
 void Screenshot::writeToPPMFile(const std::string& filename) const
 {
+    assert(m_data);
+
     std::fstream file;
     file.open(filename, std::ios_base::out|std::ios_base::binary);
     if (!file.is_open())
@@ -59,10 +76,10 @@ void Screenshot::writeToPPMFile(const std::string& filename) const
     // Magic bytes
     file.write("P6\n", 3);
 
-    const std::string widthStr = std::to_string(getWidth()) + "\n";
+    const std::string widthStr = std::to_string(m_width) + "\n";
     file.write(widthStr.c_str(), widthStr.length());
 
-    const std::string heightStr = std::to_string(getHeight()) + "\n";
+    const std::string heightStr = std::to_string(m_height) + "\n";
     file.write(heightStr.c_str(), heightStr.length());
 
     // Max component value
@@ -80,23 +97,16 @@ void Screenshot::writeToPPMFile(const std::string& filename) const
 
 void Screenshot::destroy()
 {
-    assert(g_isDisplayOpen);
-    // Unbind the shared buffer
-    XShmDetach(m_disp, m_shmInfo);
-    shmdt(m_shmInfo->shmaddr);
-    // Delete the shared buffer
-    shmctl(m_shmInfo->shmid, IPC_RMID, 0);
-    delete m_shmInfo;
-
-    m_disp = nullptr;
-    m_screen = nullptr;
-    m_shmInfo = nullptr;
-    m_img = nullptr;
+    delete[] m_data;
+    m_data = nullptr;
+    m_width = 0;
+    m_height = 0;
+    m_bytesPerLine = 0;
 }
 
 Screenshot::~Screenshot()
 {
-    if (m_img)
+    if (m_data)
         destroy();
 }
 
