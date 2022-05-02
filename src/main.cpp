@@ -382,6 +382,8 @@ int main()
                     if (event.xbutton.button == 1)
                     {
                         isDragging = true;
+                        mouseX = event.xmotion.x;
+                        mouseY = event.xmotion.y;
                         selStartX = mouseX;
                         selStartY = mouseY;
                     }
