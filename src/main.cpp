@@ -453,6 +453,7 @@ int main()
 
         const std::string filename = genFilenamePref()+".ppm";
         sshot.writeToPPMFile(filename);
+        sshot.copyToClipboard();
         std::cout << "Saved screenshot to \""+filename+"\"\n";
     }
     else

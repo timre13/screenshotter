@@ -95,6 +95,16 @@ void Screenshot::writeToPPMFile(const std::string& filename) const
     file.close();
 }
 
+void Screenshot::copyToClipboard() const
+{
+    assert(m_data);
+    // TODO: Find a better way
+
+    // Write to a temporary file and use xclip to copy the file data to clipboard
+    writeToPPMFile("/tmp/sshot_img.ppm");
+    std::system("xclip -selection clipboard -t image/x-portable-bitmap /tmp/sshot_img.ppm");
+}
+
 void Screenshot::crop(int fromX, int fromY, int width, int height)
 {
     assert(width > 0);
