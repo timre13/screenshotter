@@ -46,6 +46,7 @@ public:
     void crop(int fromX, int fromY, int width, int height);
 
     void writeToPPMFile(const std::string& filename) const;
+    void writeToPNGFile(const std::string& filename) const;
     void copyToClipboard() const;
 
     void destroy();

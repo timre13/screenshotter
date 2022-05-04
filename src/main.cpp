@@ -451,10 +451,13 @@ int main()
             std::cout.flush();
         }
 
-        const std::string filename = genFilenamePref()+".ppm";
-        sshot.writeToPPMFile(filename);
+        const std::string filenamePref = genFilenamePref();
+        //sshot.writeToPPMFile(filenamePref+".ppm");
+        //std::cout << "Saved screenshot to \""+filenamePref+".ppm\"\n";
+        sshot.writeToPNGFile(filenamePref+".png");
+        std::cout << "Saved screenshot to \""+filenamePref+".png\"\n";
         sshot.copyToClipboard();
-        std::cout << "Saved screenshot to \""+filename+"\"\n";
+        std::cout << "Copied screenshot to clipboard\n";
     }
     else
     {

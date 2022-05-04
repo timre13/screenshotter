@@ -1,4 +1,6 @@
 #include "Screenshot.h"
+#include <iostream>
+#include <libpng/png.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
 #include <fstream>
@@ -54,6 +56,12 @@ Screenshot::Screenshot(Display* disp)
     m_data = new uint8_t[m_bytesPerLine*m_height];
     std::memcpy(m_data, img->data, m_bytesPerLine*m_height);
 
+    for (int i{}; i < m_width*m_height; ++i)
+    {
+        // Set alpha to 255
+        m_data[i*BYTES_PER_PIXEL+3] = 255;
+    }
+
     // Unbind the shared buffer
     XShmDetach(disp, shmInfo);
     shmdt(shmInfo->shmaddr);
@@ -95,14 +103,70 @@ void Screenshot::writeToPPMFile(const std::string& filename) const
     file.close();
 }
 
+void Screenshot::writeToPNGFile(const std::string& filename) const
+{
+    // --- Init ---
+
+    FILE* fp = fopen(filename.c_str(), "wb");
+    assert(fp);
+
+    png_structp pngPtr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    assert(pngPtr);
+
+    png_infop infoPtr = png_create_info_struct(pngPtr);
+    assert(infoPtr);
+
+    int ret = setjmp(png_jmpbuf(pngPtr));
+    assert(ret == 0);
+
+    png_init_io(pngPtr, fp);
+
+    // --- Write header ---
+
+    ret = setjmp(png_jmpbuf(pngPtr));
+    assert(ret == 0);
+
+    png_set_IHDR(pngPtr, infoPtr, m_width, m_height, 8,
+            PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
+            PNG_FILTER_TYPE_BASE);
+
+    png_write_info(pngPtr, infoPtr);
+
+    // --- Write data ---
+
+    ret = setjmp(png_jmpbuf(pngPtr));
+    assert(ret == 0);
+    uint8_t* row = new uint8_t[m_width*3];
+    for (int y{}; y < m_height; ++y)
+    {
+        // Copy data to temporary buffer without alpha and fix byte order
+        for (int x{}; x < m_width; ++x)
+        {
+            row[x*3+0] = m_data[y*m_bytesPerLine+x*4+2];
+            row[x*3+1] = m_data[y*m_bytesPerLine+x*4+1];
+            row[x*3+2] = m_data[y*m_bytesPerLine+x*4+0];
+        }
+        png_write_row(pngPtr, row);
+    }
+    delete[] row;
+
+    // --- End write ---
+
+    ret = setjmp(png_jmpbuf(pngPtr));
+    assert(ret == 0);
+    png_write_end(pngPtr, infoPtr);
+
+    fclose(fp);
+}
+
 void Screenshot::copyToClipboard() const
 {
     assert(m_data);
     // TODO: Find a better way
 
     // Write to a temporary file and use xclip to copy the file data to clipboard
-    writeToPPMFile("/tmp/sshot_img.ppm");
-    std::system("xclip -selection clipboard -t image/x-portable-bitmap /tmp/sshot_img.ppm");
+    writeToPNGFile("/tmp/sshot_img.png");
+    std::system("xclip -selection clipboard -t image/png /tmp/sshot_img.png");
 }
 
 void Screenshot::crop(int fromX, int fromY, int width, int height)
