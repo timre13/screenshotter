@@ -8,6 +8,7 @@
 #include <string>
 #include <ctime>
 #include <cassert>
+#include <cstdlib>
 #include "Screenshot.h"
 
 using uint = unsigned int;
@@ -451,11 +452,22 @@ int main()
             std::cout.flush();
         }
 
-        const std::string filenamePref = genFilenamePref();
-        //sshot.writeToPPMFile(filenamePref+".ppm");
-        //std::cout << "Saved screenshot to \""+filenamePref+".ppm\"\n";
-        sshot.writeToPNGFile(filenamePref+".png");
-        std::cout << "Saved screenshot to \""+filenamePref+".png\"\n";
+        { // Write to file
+            std::string filename;
+            if (const char* homeDir = getenv("HOME"))
+            {
+                filename = std::string(homeDir)+"/Pictures/";
+            }
+            else
+            {
+                std::cerr << "WARN: Failed to get $HOME\n";
+            }
+            filename += genFilenamePref()+".png";
+
+            sshot.writeToPNGFile(filename);
+            std::cout << "Saved screenshot to \""+filename+"\"\n";
+        }
+
         sshot.copyToClipboard();
         std::cout << "Copied screenshot to clipboard\n";
     }
