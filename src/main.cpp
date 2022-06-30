@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstdlib>
 #include "Screenshot.h"
+#include "utils.h"
 
 using uint = unsigned int;
 
@@ -168,6 +169,8 @@ static uint createShaderProg(const char* vertSource, const char* fragSource)
 
 int main()
 {
+    notifInit("Screenshot");
+
     XSetErrorHandler(&xErrHandler);
 
     Display* disp = XOpenDisplay(nullptr);
@@ -466,6 +469,7 @@ int main()
 
             sshot.writeToPNGFile(filename);
             std::cout << "Saved screenshot to \""+filename+"\"\n";
+            notifShow("Screenshot Saved", "Saved screenshot to \""+filename+"\"");
         }
 
         sshot.copyToClipboard();
@@ -490,5 +494,6 @@ int main()
     XCloseDisplay(disp);
     XFreeCursor(disp, curs);
     g_isDisplayOpen = false;
+    notifUninit();
     return 0;
 }
