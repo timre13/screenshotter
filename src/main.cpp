@@ -167,6 +167,73 @@ static uint createShaderProg(const char* vertSource, const char* fragSource)
     return prog;
 }
 
+struct WinGeometry
+{
+    int x{};
+    int y{};
+    int w{};
+    int h{};
+};
+
+static Window getToplevelWin(Display* disp, Window win)
+{
+    while (true)
+    {
+        Window rootWin;
+        Window parentWin;
+        Window* children;
+        uint childCount;
+        if (XQueryTree(disp, win, &rootWin, &parentWin, &children, &childCount) == 0)
+        {
+            std::cerr << "Failed to get top level window\n";
+            notifShow("Screenshot Error", "Failed to get top level window");
+            throw std::runtime_error{"Failed to get top level window"};
+        }
+
+        if (children)
+            XFree(children);
+
+        // If this is the root or this is a top-level window
+        if (win == rootWin || parentWin == rootWin)
+            return win;
+        else
+            win = parentWin; // Go to the next parent
+    }
+}
+
+WinGeometry getFocusedWinGeom(Display* disp)
+{
+    WinGeometry out;
+
+    Window win;
+    int focusState;
+    XGetInputFocus(disp, &win, &focusState);
+    try
+    {
+        win = getToplevelWin(disp, win);
+    }
+    catch (...)
+    {
+        return {};
+    }
+
+    XWindowAttributes attrs;
+    XGetWindowAttributes(disp, win, &attrs);
+    assert(attrs.width > 1 && attrs.height > 1);
+    out.x = attrs.x;
+    out.y = attrs.y;
+    out.w = attrs.width;
+    out.h = attrs.height;
+
+    return out;
+}
+
+enum class ScreenshotType
+{
+    CroppedOrFull,
+    FocusedWindow,
+};
+
 int main()
 {
     notifInit("Screenshot");
@@ -187,6 +254,10 @@ int main()
     Status rets = XGetWindowAttributes(disp, rootWin, &attrs);
     assert(rets);
     std::cout << "Root window size is: " << attrs.width << "x" << attrs.height << '\n';
+
+    WinGeometry focusedWinGeom = getFocusedWinGeom(disp);
+    std::cout << "Focused window geometry: (x=" << focusedWinGeom.x << ", y="
+        << focusedWinGeom.y << ") (w=" << focusedWinGeom.w << ", h=" << focusedWinGeom.h << ")\n";
 
     XSetWindowAttributes winAttrs{};
     winAttrs.border_pixel = 0;
@@ -330,7 +401,9 @@ int main()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glPolygonMode(GL_FRONT_AND_BACK, false ? GL_LINE : GL_FILL);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    ScreenshotType sshotType = ScreenshotType::CroppedOrFull;
 
     bool isDragging = false;
     int mouseX{};
@@ -359,6 +432,12 @@ int main()
                     {
                         done = true;
                         cancelled = false;
+                    }
+                    else if (key == XK_w)
+                    {
+                        done = true;
+                        cancelled = false;
+                        sshotType = ScreenshotType::FocusedWindow;
                     }
                     break;
                 }
@@ -439,20 +518,30 @@ int main()
 
     if (!cancelled)
     {
-        const int xPos = std::min(selStartX, mouseX);
-        const int yPos = std::min(selStartY, mouseY);
-        const int width = std::abs(selStartX-mouseX);
-        const int height = std::abs(selStartY-mouseY);
-        if (width > 0 && height > 0)
+        bool didSelectionCropping = false;
+        if (sshotType == ScreenshotType::CroppedOrFull)
         {
-            std::cout << "Cropping: position: (" << xPos << ", " << yPos << "), size: " << width << 'x' << height << '\n';
-            std::cout.flush();
-            sshot.crop(xPos, yPos, width, height);
+            const int xPos = std::min(selStartX, mouseX);
+            const int yPos = std::min(selStartY, mouseY);
+            const int width = std::abs(selStartX-mouseX);
+            const int height = std::abs(selStartY-mouseY);
+            if (width > 0 && height > 0)
+            {
+                std::cout << "Cropping: position: (" << xPos << ", " << yPos << "), size: " << width << 'x' << height << '\n';
+                std::cout.flush();
+                sshot.crop(xPos, yPos, width, height);
+                didSelectionCropping = true;
+            }
+            else
+            {
+                std::cout << "Not cropping\n";
+                std::cout.flush();
+            }
         }
-        else
+        else if (sshotType == ScreenshotType::FocusedWindow)
         {
-            std::cout << "Not cropping\n";
-            std::cout.flush();
+            std::cout << "Cropping to focused window geometry\n";
+            sshot.crop(focusedWinGeom.x, focusedWinGeom.y, focusedWinGeom.w, focusedWinGeom.h);
         }
 
         { // Write to file
@@ -469,7 +558,13 @@ int main()
 
             sshot.writeToPNGFile(filename);
             std::cout << "Saved screenshot to \""+filename+"\"\n";
-            notifShow("Screenshot Saved", "Saved screenshot to \""+filename+"\"");
+
+            if (sshotType == ScreenshotType::FocusedWindow)
+                notifShow("Created screenshot of focused window", "Saved screenshot to \""+filename+"\"");
+            else if (sshotType == ScreenshotType::CroppedOrFull && didSelectionCropping)
+                notifShow("Created screenshot of selected area",  "Saved screenshot to \""+filename+"\"");
+            else if (sshotType == ScreenshotType::CroppedOrFull)
+                notifShow("Created screenshot of all screens",    "Saved screenshot to \""+filename+"\"");
         }
 
         sshot.copyToClipboard();

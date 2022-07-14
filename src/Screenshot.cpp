@@ -173,8 +173,8 @@ void Screenshot::crop(int fromX, int fromY, int width, int height)
 {
     assert(width > 0);
     assert(height > 0);
-    assert(fromX + width < m_width);
-    assert(fromY + height < m_height);
+    assert(fromX + width <= m_width);
+    assert(fromY + height <= m_height);
 
     const int bytesPerLine = width*BYTES_PER_PIXEL;
     uint8_t* buff = new uint8_t[height*bytesPerLine]{};
