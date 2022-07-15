@@ -20,7 +20,7 @@ include_directories(
     /usr/lib/x86_64-linux-gnu/glib-2.0/include
 )
 
-link_libraries(X11 Xext GLX GL GLEW png16 z notify gdk_pixbuf-2.0 gio-2.0 gobject-2.0 glib-2.0)
+link_libraries(X11 Xext Xrandr GLX GL GLEW png16 z notify gdk_pixbuf-2.0 gio-2.0 gobject-2.0 glib-2.0)
 
 add_executable(shot
     src/main.cpp

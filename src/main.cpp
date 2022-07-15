@@ -1,6 +1,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/cursorfont.h>
+#include <X11/extensions/Xrandr.h>
 #include <GL/glew.h>
 #include <GL/gl.h>
 #include <GL/glx.h>
@@ -228,10 +229,70 @@ WinGeometry getFocusedWinGeom(Display* disp)
     return out;
 }
 
+WinGeometry getCurrentMonitorGeom(Display* disp)
+{
+    WinGeometry out;
+
+    const Window rootWin = XDefaultRootWindow(disp);
+    int monCount;
+    XRRMonitorInfo* monInfoArr = XRRGetMonitors(disp, rootWin, false, &monCount);
+    std::cout << "There are " << monCount << " monitors\n";
+    for (int i{}; i < monCount; ++i)
+    {
+        char* name = XGetAtomName(disp, monInfoArr[i].name);
+        std::cout << '\t' << name << ": (w=" << monInfoArr[i].width << ", h=" << monInfoArr[i].height << ") "
+            "@ (" << monInfoArr[i].x << ", " << monInfoArr[i].y << ")\n";
+        XFree(name);
+    }
+
+    int cursX, cursY;
+    {
+        Window rootRet;
+        Window childWin;
+        int winX, winY;
+        uint btnMask;
+        XQueryPointer(disp, rootWin, &rootRet, &childWin, &cursX, &cursY, &winX, &winY, &btnMask);
+    }
+    std::cout << "Pointer is at " << cursX << ", " << cursY << '\n';
+
+    // Index of monitor where the cursor is
+    int cursMonI = -1;
+    for (int i{}; i < monCount; ++i)
+    {
+        const int mx1 = monInfoArr[i].x;
+        const int my1 = monInfoArr[i].y;
+        const int mx2 = mx1 + monInfoArr[i].width;
+        const int my2 = my1 + monInfoArr[i].height;
+
+        if (cursX >= mx1 && cursX <= mx2 && cursY >= my1 && cursY <= my2)
+        {
+            cursMonI = i;
+            break;
+        }
+    }
+    if (cursMonI == -1)
+    {
+        std::cerr << "Failed to get focused monitor\n";
+        notifShow("Screenshot Error", "Failed to get focused monitor");
+        throw std::runtime_error{"Failed to get focused monitor"};
+    }
+
+    std::cout << "Pointer is on monitor " << cursMonI << '\n';
+
+    out.x = monInfoArr[cursMonI].x;
+    out.y = monInfoArr[cursMonI].y;
+    out.w = monInfoArr[cursMonI].width;
+    out.h = monInfoArr[cursMonI].height;
+
+    XRRFreeMonitors(monInfoArr);
+    return out;
+}
+
 enum class ScreenshotType
 {
     CroppedOrFull,
     FocusedWindow,
+    CurrentScreen,
 };
 
 int main()
@@ -439,6 +500,12 @@ int main()
                         cancelled = false;
                         sshotType = ScreenshotType::FocusedWindow;
                     }
+                    else if (key == XK_s)
+                    {
+                        done = true;
+                        cancelled = false;
+                        sshotType = ScreenshotType::CurrentScreen;
+                    }
                     break;
                 }
 
@@ -515,7 +582,6 @@ int main()
         glXSwapBuffers(disp, glxWin);
     }
 
-
     if (!cancelled)
     {
         bool didSelectionCropping = false;
@@ -543,6 +609,12 @@ int main()
             std::cout << "Cropping to focused window geometry\n";
             sshot.crop(focusedWinGeom.x, focusedWinGeom.y, focusedWinGeom.w, focusedWinGeom.h);
         }
+        else if (sshotType == ScreenshotType::CurrentScreen)
+        {
+            std::cout << "Cropping to cursor monitor geometry\n";
+            const WinGeometry geom = getCurrentMonitorGeom(disp);
+            sshot.crop(geom.x, geom.y, geom.w, geom.h);
+        }
 
         { // Write to file
             std::string filename;
@@ -561,6 +633,8 @@ int main()
 
             if (sshotType == ScreenshotType::FocusedWindow)
                 notifShow("Created screenshot of focused window", "Saved screenshot to \""+filename+"\"");
+            else if (sshotType == ScreenshotType::CurrentScreen)
+                notifShow("Created screenshot of current screen", "Saved screenshot to \""+filename+"\"");
             else if (sshotType == ScreenshotType::CroppedOrFull && didSelectionCropping)
                 notifShow("Created screenshot of selected area",  "Saved screenshot to \""+filename+"\"");
             else if (sshotType == ScreenshotType::CroppedOrFull)

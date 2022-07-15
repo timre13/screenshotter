@@ -6,6 +6,7 @@ Lightweight screenshot taker program for Unix systems running X.
 Note: Almost all of these are already installed on most Linux systems.
 * X11
 * Xlib
+* Xrandr
 * GLX
 * GLEW
 * libpng16
@@ -19,7 +20,7 @@ Note: Almost all of these are already installed on most Linux systems.
 
 Command for Debian:
 ```sh
-sudo apt install libx11-dev libglx-dev libglew-dev libpng-dev libz3-dev libnotify-dev libgtk2.0-dev
+sudo apt install libx11-dev libxrandr-dev libglx-dev libglew-dev libpng-dev libz3-dev libnotify-dev libgtk2.0-dev
 ```
 
 ### Step 2: Clone repo
