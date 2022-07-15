@@ -2,6 +2,13 @@
 
 Lightweight screenshot taker program for Unix systems running X.
 
+## Features
+Taking screenshot of
+* all the screens (Enter key)
+* current screen (s key)
+* active window (w key)
+* selected area (mouse selection + Enter)
+
 ## Dependencies
 Note: Almost all of these are already installed on most Linux systems.
 * X11
